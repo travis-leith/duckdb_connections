@@ -103,10 +103,34 @@ let test3 (env: #IDb) = testAsync "Sequential Connection Concurrent Query2" {
 let allTests env = 
     testList "" 
         [
-            //test1 env
-            //test2 env
+            test1 env
+            test2 env
             test3 env
         ]
+
+
+type SyncConnectionsEnv(dbName) =
+    let agent = MailboxProcessor.Start (fun inbox ->
+        let rec messageLoop() = async {
+            let! (rep:AsyncReplyChannel<DuckDBConnection>) = inbox.Receive()
+            let conn = new DuckDBConnection($"Data Source=%s{dbName}")
+            conn.Open()
+            rep.Reply(conn)
+            return! messageLoop()
+        }
+        messageLoop()
+    )
+
+    let database = {
+        new IDatabase with
+            member this.OpenConnection() = async{
+                return agent.PostAndReply id
+            }
+    }
+
+    interface IDb with
+        member this.Database = database
+
 
 [<EntryPoint>]
 let main argv =
@@ -114,17 +138,17 @@ let main argv =
     if File.Exists(dbName) then
         File.Delete(dbName)
     //implement the database dependency interface
-    let database = {
-        new IDatabase with
-            member this.OpenConnection() = async{
-                return new DuckDBConnection($"Data Source={dbName}")
-            }
-    }
+    //let database = {
+    //    new IDatabase with
+    //        member this.OpenConnection() = async{
+    //            return new DuckDBConnection($"Data Source={dbName}")
+    //        }
+    //}
     
-    let env = {
-        new IDb with
-            member this.Database = database
-    }
-
+    //let env = {
+    //    new IDb with
+    //        member this.Database = database
+    //}
+    let env = SyncConnectionsEnv(dbName)
     initialiseDb env |> Async.RunSynchronously
     runTestsWithCLIArgs [] argv (allTests env)
