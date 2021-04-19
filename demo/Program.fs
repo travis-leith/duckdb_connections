@@ -48,65 +48,41 @@ let initialiseDb (env: #IDb) = async{
 }
     
 type DbReturn<'t> = {query_value: 't}
-let selectMin (conn: DuckDBConnection) = async{
+let selectMin (env: #IDb) = async{
+    use! conn = env.Database.OpenConnection()
     let x = conn.Query<DbReturn<int>>("select min(col2) query_value from test_table") |> Seq.exactlyOne
     return x.query_value
 }
     
-
-let selectMax (conn: DuckDBConnection) = async{
+let selectMax (env: #IDb) = async{
+    use! conn = env.Database.OpenConnection()
     let x = conn.Query<DbReturn<int>>("select max(col2) query_value from test_table") |> Seq.exactlyOne
     return x.query_value
 }
     
-
-let selectAvg (conn: DuckDBConnection) = async{
+let selectAvg (env: #IDb) = async{
+    use! conn = env.Database.OpenConnection()
     let x = conn.Query<DbReturn<float>>("select avg(col2) query_value from test_table") |> Seq.exactlyOne
     return x.query_value |> int
 }
 
-let getSum1 (env: #IDb) = async{
-    //sequentially open the connections
-    let! con1 = env.Database.OpenConnection()
-    let! con2 = env.Database.OpenConnection()
-    let! con3 = env.Database.OpenConnection()
-
+let getSum1 env = async{
     //sequentially run the queries
-    let! minVal = selectMin con1
-    let! maxVal = selectMax con2
-    let! avgVal = selectAvg con3
+    let! minVal = selectMin env
+    let! maxVal = selectMax env
+    let! avgVal = selectAvg env
 
     return minVal + maxVal + avgVal
 }
 
-let getSum2 (env: #IDb) = async{
-    //sequentially open the connections
-    let! con1 = env.Database.OpenConnection()
-    let! con2 = env.Database.OpenConnection()
-    let! con3 = env.Database.OpenConnection()
-
+let getSum2 env = async{
     //concurrently run the queries
-    let! minVal = selectMin con1
-    and! maxVal = selectMax con2
-    and! avgVal = selectAvg con3
+    let! minVal = selectMin env
+    and! maxVal = selectMax env
+    and! avgVal = selectAvg env
 
     return minVal + maxVal + avgVal
 }
-
-let getSum3 (env: #IDb) = async{
-    //concurrently open the connections
-    let! con1 = env.Database.OpenConnection()
-    and! con2 = env.Database.OpenConnection()
-    and! con3 = env.Database.OpenConnection()
-
-    //concurrently run the queries
-    let! minVal = selectMin con1
-    and! maxVal = selectMax con2
-    and! avgVal = selectAvg con3
-
-    return minVal + maxVal + avgVal
-}
-
 
 let test1 env = testAsync "Sequential Connection Sequential Query" {
     let! sum = getSum1 env
@@ -119,18 +95,16 @@ let test2 (env: #IDb) = testAsync "Sequential Connection Concurrent Query" {
     sum |> Expect.equal "" 150001
 }
 
-
-let test3 (env: #IDb) = testAsync "Concurrent Connection Concurrent Query" {
-    let! sum = getSum3 env
+let test3 (env: #IDb) = testAsync "Sequential Connection Concurrent Query2" {
+    let! sum = getSum2 env
     sum |> Expect.equal "" 150001
 }
-
 
 let allTests env = 
     testList "" 
         [
-            test1 env
-            test2 env
+            //test1 env
+            //test2 env
             test3 env
         ]
 
